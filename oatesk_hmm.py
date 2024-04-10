@@ -50,9 +50,9 @@ def calc_prob(transitions, emissions):
     """
     inputs: transitions, emissions
     this function calculates the probabilities, using smoothing where needed
-    returns: transition_probs, emission_probs (as dictonaries) 
+    returns: transition_probs, emission_probs (as dictionaries) 
     """
-    smoothing_val = 1e-3
+    smoothing_val = 1e-6
     all_states = ['o', 'M', 'i']
     all_symbols = set(sym for em in emissions.values() for sym in em)
 
@@ -60,37 +60,45 @@ def calc_prob(transitions, emissions):
     for s in all_states:
         total_transitions = sum(transitions.get(s, {}).values()) + smoothing_val * len(all_states)
         for s2 in all_states:
-            transition_probs[s][s2] = (transitions.get(s, {}).get(s2, 0) + smoothing_val) / total_transitions
+            transition_count = transitions.get(s, {}).get(s2, 0)
+            transition_probs[s][s2] = (transition_count + smoothing_val) / total_transitions
 
     emission_probs = {s: {} for s in emissions}
     for s in all_states:
         total_emissions = sum(emissions.get(s, {}).values()) + smoothing_val * len(all_symbols)
         for symbol in all_symbols:
-            emission_probs[s][symbol] = (emissions.get(s, {}).get(symbol, 0) + smoothing_val) / total_emissions
+            emission_count = emissions.get(s, {}).get(symbol, 0)
+            emission_probs[s][symbol] = (emission_count + smoothing_val) / total_emissions
 
     return transition_probs, emission_probs
 
+
+import numpy as np
+
 def log_viterbi(seq, transition_probs, emission_probs):
     """
-    inputs: seq (sequence), transition_probs, emission_prob
+    inputs: seq (sequence), transition_probs, emission_probs
     this function implements the Viterbi algorithm with logarithm transformation
-    it inializes matricies (V and path) for storing probabilities and paths through states
+    it initializes matrices (V and path) for storing probabilities and paths through states
     it computes the probability at each step, then backtraces to find the most likely 
     sequence of states
     returns: most likely state sequence for the given sequence
     """
     state_map = {'o': 0, 'M': 1, 'i': 2}
-    V = np.full((3, len(seq)), -1000)
+    V = np.full((3, len(seq)), -np.inf)  # Initialize with negative infinity
     path = np.zeros((3, len(seq)), dtype=int)
     state_list = ['o', 'M', 'i']
 
     for s in state_list:
-        V[state_map[s], 0] = np.log(emission_probs[s].get(seq[0], 1e-10))
+        V[state_map[s], 0] = np.log(emission_probs[s].get(seq[0], 1e-6))  # Smoothing for emissions
 
     for t in range(1, len(seq)):
         for s in state_list:
             for ps in state_list:
-                prob = V[state_map[ps], t-1] + np.log(transition_probs[ps].get(s, 1e-10)) + np.log(emission_probs[s].get(seq[t], 1e-10))
+                transition_prob = transition_probs[ps].get(s, 0)
+                emission_prob = emission_probs[s].get(seq[t], 1e-6)  # Smoothing for emissions
+                log_prob = np.log(transition_prob + 1e-6) + np.log(emission_prob)
+                prob = V[state_map[ps], t-1] + log_prob
                 if prob > V[state_map[s], t]:
                     V[state_map[s], t] = prob
                     path[state_map[s], t] = state_map[ps]
